@@ -3,6 +3,7 @@
 # Needs ./build/cacheprobe (see README), python3 and glslc on PATH. Writes everything under ./out/<timestamp>/.
 # Driver shader cache modes (NVIDIA, Linux): OFF = __GL_SHADER_DISK_CACHE=0; ON-EMPTY = the variable unset and
 # __GL_SHADER_DISK_CACHE_PATH pointing at a fresh empty directory, so the user's own driver cache is never touched.
+# Mesa drivers (AMD, Intel): CACHEPROBE=./cacheprobe-mesa.sh maps both modes to Mesa's cache variables (see README).
 set -u
 N=${1:-3000}
 FILL=${2:-200}

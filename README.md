@@ -14,6 +14,7 @@ no application or game data is involved, and the program treats the cache payloa
 | `cacheprobe.cpp` | the probe (one C++20 file, Vulkan 1.1 instance; `VK_EXT_pipeline_creation_feedback` when present; `VK_EXT_subgroup_size_control` with `--subgroup32`/`--full`; `VK_EXT_descriptor_indexing` plus `VK_KHR_maintenance3` with `--uab`); every Vulkan name it uses is present in Vulkan-Headers 1.2.158 and later (names checked, not compiled against) |
 | `gen_slow.py` | writes a GLSL compute shader whose body is N groups of three statements (plus one branch per 50) inside a loop bounded by specialization constant K0, so a creation takes the driver's compiler a measurable time; eight specialization constants select variants |
 | `run_cases.sh` | the Linux driver for cases A-G below (bash, needs `glslc` and `python3`) |
+| `cacheprobe-mesa.sh` | lets `run_cases.sh` drive `cacheprobe` on a Mesa driver (AMD RADV, Intel ANV): maps the two driver cache modes to Mesa's variables and picks the device (see Mesa drivers below) |
 | `CMakeLists.txt` | `find_package(Vulkan)` build of `cacheprobe` |
 | `LICENSE` | MIT |
 
@@ -82,9 +83,44 @@ The results depend on the driver's own shader disk cache. On Linux (NVIDIA):
 - ON-EMPTY: the variable unset and `__GL_SHADER_DISK_CACHE_PATH=<fresh empty directory>`, so the process starts with
   an empty driver cache and the user's own cache is never touched.
 
-`run_cases.sh` sets these per invocation. On Windows we do not know a per-process equivalent; the tester chooses how to
-handle the driver cache and should state it with the results. We ran no case against a populated driver cache, so
-results obtained that way have no counterpart here and should be labelled as such.
+`run_cases.sh` sets these per invocation; with a Mesa driver, `cacheprobe-mesa.sh` maps the two modes to Mesa's
+variables (next section). On Windows we do not know a per-process equivalent; the tester chooses how to handle the
+driver cache and should state it with the results. We ran no case against a populated driver cache, so results
+obtained that way have no counterpart here and should be labelled as such.
+
+## Mesa drivers (AMD, Intel)
+
+`run_cases.sh` sets NVIDIA's cache variables for every step, and `cacheprobe` picks the first NVIDIA device by default.
+`cacheprobe-mesa.sh` makes the same script run on a Mesa driver (RADV for AMD, ANV for Intel; we tried RADV only):
+`run_cases.sh` runs the wrapper in place of the binary (`CACHEPROBE=./cacheprobe-mesa.sh`), and for each step the
+wrapper maps the mode to Mesa's variables, picks the device and runs `build/cacheprobe`:
+
+| `run_cases.sh` mode | NVIDIA variable the script sets | what the wrapper sets for Mesa |
+|---|---|---|
+| OFF | `__GL_SHADER_DISK_CACHE=0` | `MESA_SHADER_CACHE_DISABLE=true` |
+| ON-EMPTY | `__GL_SHADER_DISK_CACHE_PATH=<fresh directory>` | `MESA_SHADER_CACHE_DIR=<the same directory>`; Mesa writes its caches inside it (here `mesa_shader_cache/` and RADV's `radv_builtin_shaders/`), and `run_cases.sh` empties it before each ON-EMPTY step |
+
+Through the wrapper, no step reads or writes the user's own Mesa caches (`mesa_shader_cache`, RADV's
+`radv_builtin_shaders`, under `$XDG_CACHE_HOME` or `~/.cache`). The wrapper maps only these two variables; a direct call
+through it with neither set runs with the caller's own Mesa settings.
+
+Device: `CACHEPROBE_DEVICE=N` makes the wrapper pass `--device N`; without it the wrapper passes `--any-vendor`, which
+takes the first device the Vulkan loader lists, and that can be another vendor's GPU, an integrated GPU or a software
+device (llvmpipe). On the RX 7900 XT machine below the loader listed the discrete GPU at 0, the Ryzen iGPU at 1 and
+llvmpipe at 2; on ours the RTX 3080 at 0 and the Ryzen iGPU at 1. Every `cacheprobe` process prints the devices it sees
+as `physical device N: <name> (vendor 0x....)` into `out/<timestamp>/cases.log` (the filtered summary shows only the
+chosen `device ...` line), so run a short set first, read the indices, then the full run:
+
+```
+CACHEPROBE=./cacheprobe-mesa.sh ./run_cases.sh 300 10 2000 5                # tiny shaders, under a minute
+grep -h 'physical device' out/<timestamp>/cases.log | sort -u               # <timestamp>: from the summary's 'full log:' line
+CACHEPROBE_DEVICE=0 CACHEPROBE=./cacheprobe-mesa.sh ./run_cases.sh          # the full run on device 0
+```
+
+The summary's `device ...` lines must name the intended GPU and say `feedback ext`; in the short set some B7/B8 probes
+miss by design (seeds a 10-variant cache does not hold). On our machine the short set on the Ryzen 9 7950X3D iGPU
+(RADV, Mesa 26.2.4, `CACHEPROBE_DEVICE=1` next to the RTX 3080) took 12 s. AMDVLK, amdgpu-pro and other non-Mesa
+drivers have their own cache controls, so the mapping does not apply to them; state the driver with the results.
 
 ## Shaders
 
@@ -223,9 +259,24 @@ Did not reproduce it:
 Nothing synthetic reached the scale of the issue (a 147 MB cache; per-pipeline files of 3.5-6.6 MB that did not serve):
 the largest single-pipeline file here is 2.7 MB and the largest cache 25 MB, and every single-pipeline file served.
 
+## Other results
+
+**RX 7900 XT, RADV, Mesa 25.2.8 (Ubuntu 24.04 container), Linux 7.3**, run by [@ondra2305](https://github.com/ondra2305)
+on 2026-10-26: `run_cases.sh` at its defaults through `cacheprobe-mesa.sh` with `CACHEPROBE_DEVICE=0`, 6.6 minutes, valid
+feedback on every creation. On RADV a served creation reports `cache-hit` in the pipeline feedback and `cache-miss` in
+the stage feedback (every served creation of this run, and of our short set on the iGPU).
+
+- Cold references (A0, B3, C1): `slow.spv` 198-202 ms. Every import of single-pipeline data was served at 0 ms with
+  `cache-hit`: A2-A4 for all six option sets, B4-B6, C2-C4, D1-D3 and E2-E4.
+- The 200-variant cache was 37,720,000 B. B7 and B8 served every probed variant at 0 ms with `cache-hit`, B8 (the
+  reader with an empty Mesa cache) included; on the NVIDIA run above B8 missed five of its nine variants.
+- `huge.spv`: 28.9-29.9 s cold; F3-F8 served at 1-2 ms.
+- G: the 150-variant prefill took 28.7-30.2 s; the imports after it were served at 1-2 ms.
+
 ## What to report
 
 The filtered summary `run_cases.sh` prints (device line with driver version and `pipelineCacheUUID`, every `== ` header
-with its creation line, cache sizes), the OS and driver version, and how the driver's own shader cache was handled.
+with its creation line, cache sizes), the OS and driver version, and how the driver's own shader cache was handled
+(with a Mesa driver: that the modes ran through `cacheprobe-mesa.sh`).
 
 AI-assisted: yes (Claude Code)
