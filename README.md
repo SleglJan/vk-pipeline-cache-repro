@@ -273,6 +273,30 @@ the stage feedback (every served creation of this run, and of our short set on t
 - `huge.spv`: 28.9-29.9 s cold; F3-F8 served at 1-2 ms.
 - G: the 150-variant prefill took 28.7-30.2 s; the imports after it were served at 1-2 ms.
 
+**RTX 5080, NVIDIA 615.78.08 (nvidia-open), Arch, Linux 7.2.11**, run by [fma-rc](https://github.com/fma-rc) on 2026-10-27
+([results thread](https://github.com/SleglJan/vk-pipeline-cache-repro/issues/1#issuecomment-6443977627)): `run_cases.sh` at its
+defaults at 33f86e5, every process on `DISPLAY=:0`, one `pipelineCacheUUID` throughout.
+
+- B8: variants 0, 20, 50 and 80 served (10-12 ms, `cache-hit`), 100, 130, 150, 180 and 199 missed (1,151-1,175 ms,
+  `cache-miss`); the same split in two runs.
+- Everything else was served: A for all six option sets, B4-B7, C, D, E and F3-F8 (2-3 ms OFF, 9-17 ms ON-EMPTY;
+  `huge.spv` 27 ms OFF and 119-121 ms ON-EMPTY against 34.3 s cold), G1-G4 at 24 / 2 / 88 / 4 ms. B1 wrote
+  23,472,327 B for the 200 variants.
+- With the default 8 MB stack, F0 and F1 segfaulted inside `libnvidia-gpucomp` while compiling `huge.spv` cold; the full run
+  used `ulimit -s 262144`.
+
+**RTX 4060 Laptop GPU, NVIDIA 615.78.08, Arch (Omarchy), Linux 7.2.15**, run by [CodingBreadd](https://github.com/CodingBreadd),
+posted on 2026-11-03 ([boykopovar/AnyPS5#11106](https://github.com/boykopovar/AnyPS5/issues/11106#issuecomment-6601347983)):
+`run_cases.sh` at its defaults at 33f86e5, one 27-minute run, a Wayland session with XWayland `DISPLAY=:0`, one
+`pipelineCacheUUID` over all 70 processes; posted as a table of results (the filtered summary was not posted).
+
+- B8: of the 200-variant cache written OFF (25,519,201 B), variants 0, 20, 50 and 80 served (13 ms, `cache-hit`), 100, 130,
+  150, 180 and 199 missed (1,592-1,632 ms, `cache-miss`, against 1,595 ms cold in B3). Probed afterwards the same way (same
+  file, a fresh ON-EMPTY directory per process): 85, 88, 90, 92, 95 and 96 served, 97, 98 and 99 missed.
+- Everything else was served: A2-A4 for all six option sets and B4-B7 at 1-2 ms, C2-C4 at 13-14 ms, D1-D3 at 4 / 4 / 37 ms,
+  E2-E4 at 13 / 13 / 41 ms, F3, F5, F7 and F8 at 18-19 ms and F4 / F6 at 177 / 185 ms against 27.6 s cold, G1-G4 at
+  17 / 1 / 105 / 5 ms.
+
 ## What to report
 
 The filtered summary `run_cases.sh` prints (device line with driver version and `pipelineCacheUUID`, every `== ` header
