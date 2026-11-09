@@ -297,6 +297,19 @@ posted on 2026-11-03 ([boykopovar/AnyPS5#11106](https://github.com/boykopovar/An
   E2-E4 at 13 / 13 / 41 ms, F3, F5, F7 and F8 at 18-19 ms and F4 / F6 at 177 / 185 ms against 27.6 s cold, G1-G4 at
   17 / 1 / 105 / 5 ms.
 
+**RTX 3070, NVIDIA 610.57.04, Debian 13, Linux 6.12.115**, run by [Doorriiaann](https://github.com/Doorriiaann), posted on
+2026-11-09 ([boykopovar/AnyPS5#11106](https://github.com/boykopovar/AnyPS5/issues/11106#issuecomment-6737720513)):
+`run_cases.sh` at its defaults at 9628abd (same code as 33f86e5), one 17-minute run, a Wayland session with XWayland
+`DISPLAY=:0`, one `pipelineCacheUUID` over all 70 processes; posted as a table of results (the filtered summary was not posted).
+
+- B8: of the 200-variant cache written OFF (25,137,892 B), variants 0, 20, 50 and 80 served (12-13 ms, `cache-hit`), 100, 130,
+  150, 180 and 199 missed (1,017-1,042 ms, `cache-miss`, against 1,034 ms cold in B3). Probed afterwards the same way (same
+  file, a fresh ON-EMPTY directory per process): 81 to 96 served (12-14 ms, `cache-hit`), 97, 98 and 99 missed
+  (1,043-1,050 ms, `cache-miss`); OFF readers of the same file were served 96 and 97 (2 ms each).
+- Everything else was served: A2-A4 for all six option sets and B4-B7 at 2 ms, C2-C4 at 10 / 10 / 13 ms, D1-D3 at 3 / 3 / 26 ms,
+  E2-E4 at 10 / 10 / 27 ms, F3, F5, F7 and F8 at 25-26 ms and F4 / F6 at 133 / 135 ms against 26.7 s cold, G1-G4 at
+  22 / 2 / 91 / 6 ms.
+
 ## What to report
 
 The filtered summary `run_cases.sh` prints (device line with driver version and `pipelineCacheUUID`, every `== ` header
